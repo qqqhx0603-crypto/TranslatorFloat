@@ -132,4 +132,4 @@ python -m PyInstaller --noconfirm --onefile --windowed --name TranslatorFloat --
 
 ## 许可证
 
-当前项目尚未指定开源许可证。使用、修改、分发前请先确认仓库后续补充的许可证说明。
+本项目使用 MIT License。详见 [LICENSE](LICENSE)。

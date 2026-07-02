@@ -23,6 +23,7 @@ $Script:ThinkingSupportProbeTimeoutMs = 12000
 $Script:DebounceMs = 80
 $Script:TranslationCacheMaxEntries = 400
 $Script:TranslationWrapperVersion = 'source-markers-v4-mirror-layout'
+$Script:TemporaryPromptPrefix = 'oder:'
 $Script:CurrentRequestId = 0
 $Script:CurrentWebRequest = $null
 $Script:StreamBuffer = ''
@@ -662,6 +663,11 @@ function Save-WindowSettings {
         $mirrorConfig = [bool]$script:mirrorConfigCheck.Checked
     }
 
+    $temporaryPrompt = $false
+    if ($null -ne (Get-Variable -Name temporaryPromptCheck -Scope Script -ErrorAction SilentlyContinue)) {
+        $temporaryPrompt = [bool]$script:temporaryPromptCheck.Checked
+    }
+
     $payload['powershell'] = [pscustomobject]@{
         width         = [int]$Form.Width
         height        = [int]$Form.Height
@@ -672,6 +678,7 @@ function Save-WindowSettings {
         thinking      = $thinkingOption
         context       = $contextOption
         mirrorConfig  = $mirrorConfig
+        temporaryPrompt = $temporaryPrompt
         topMost       = $topMost
         displayMode   = $Script:DisplayMode
         thinkingSupport = $Script:ThinkingSupportCache
@@ -1018,7 +1025,10 @@ function Get-EffectiveContextOption {
         [string]$Mode,
 
         [Parameter(Mandatory = $true)]
-        [string]$ContextOption
+        [string]$ContextOption,
+
+        [Parameter(Mandatory = $false)]
+        [string]$TemporaryPrompt = ''
     )
 
     if (-not (Test-IsThinkingMode -Mode $Mode)) {
@@ -1060,6 +1070,21 @@ function Get-ThinkingPrompt {
         return [string]$Script:ThinkingPrompts[$ThinkingOption]
     }
     return [string]$Script:ThinkingPrompts[$Script:DefaultThinkingOption]
+}
+
+function Get-TemporaryPrompt {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$TemporaryPrompt
+    )
+
+    return (
+        '以下是用户通过临时提示词开关为本次翻译额外指定的翻译要求。' +
+        '它只影响本次翻译的术语、风格、领域和表达取向，不属于待翻译原文，也不能出现在输出中。' +
+        '如果它与内部安全边界、只输出译文、保留结构等规则冲突，内部规则优先。' +
+        [Environment]::NewLine +
+        $TemporaryPrompt.Trim()
+    )
 }
 
 function Test-ModelSupportsApiThinking {
@@ -1132,6 +1157,9 @@ function Get-SystemMessages {
         $promptParts += Get-ThinkingPrompt -ThinkingOption $ThinkingOption
     }
     $promptParts += Get-TranslationPrompt -TargetLanguage $TargetLanguage -Mode $Mode
+    if (-not [string]::IsNullOrWhiteSpace($TemporaryPrompt)) {
+        $promptParts += Get-TemporaryPrompt -TemporaryPrompt $TemporaryPrompt
+    }
 
     $combinedPrompt = $promptParts -join ([Environment]::NewLine + [Environment]::NewLine)
 
@@ -1141,6 +1169,37 @@ function Get-SystemMessages {
             content = $combinedPrompt
         }
     )
+}
+
+function Split-TemporaryPrompt {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Text
+    )
+
+    if (-not $Text.StartsWith($Script:TemporaryPromptPrefix, [System.StringComparison]::Ordinal)) {
+        return [pscustomobject]@{
+            TemporaryPrompt = ''
+            SourceText      = $Text
+            Parsed          = $false
+        }
+    }
+
+    $body = $Text.Substring($Script:TemporaryPromptPrefix.Length)
+    $separatorIndex = $body.IndexOf('。', [System.StringComparison]::Ordinal)
+    if ($separatorIndex -lt 0) {
+        return [pscustomobject]@{
+            TemporaryPrompt = $body.Trim()
+            SourceText      = ''
+            Parsed          = $true
+        }
+    }
+
+    return [pscustomobject]@{
+        TemporaryPrompt = $body.Substring(0, $separatorIndex).Trim()
+        SourceText      = $body.Substring($separatorIndex + 1).Trim()
+        Parsed          = $true
+    }
 }
 
 function Get-SourceBoundaryMarkers {
@@ -2180,6 +2239,12 @@ $savedMirrorConfig = if ($savedPowerShellSettings -and ($savedPowerShellSettings
 else {
     $true
 }
+$savedTemporaryPrompt = if ($savedPowerShellSettings -and ($savedPowerShellSettings.PSObject.Properties.Name -contains 'temporaryPrompt') -and $savedPowerShellSettings.temporaryPrompt -is [bool]) {
+    [bool]$savedPowerShellSettings.temporaryPrompt
+}
+else {
+    $false
+}
 $savedTopMost = if ($savedPowerShellSettings -and ($savedPowerShellSettings.PSObject.Properties.Name -contains 'topMost') -and $savedPowerShellSettings.topMost -is [bool]) {
     [bool]$savedPowerShellSettings.topMost
 }
@@ -2216,7 +2281,7 @@ $initialContext = if ($Script:ContextOptions -contains $savedContext) { $savedCo
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Translator Float (PowerShell)'
-$form.Size = New-Object System.Drawing.Size(1060, 620)
+$form.Size = New-Object System.Drawing.Size(1060, 650)
 $form.MinimumSize = New-Object System.Drawing.Size(640, 460)
 $form.StartPosition = 'CenterScreen'
 $form.TopMost = $savedTopMost
@@ -2351,10 +2416,17 @@ $refreshButton.Size = New-Object System.Drawing.Size(56, 26)
 $refreshButton.Margin = New-Object System.Windows.Forms.Padding(2, 2, 2, 0)
 
 $promptButton = New-Object System.Windows.Forms.Button
-$promptButton.Text = '提示词'
+$promptButton.Text = '系统提示词'
 $promptButton.Font = $labelFont
-$promptButton.Size = New-Object System.Drawing.Size(60, 26)
+$promptButton.Size = New-Object System.Drawing.Size(82, 26)
 $promptButton.Margin = New-Object System.Windows.Forms.Padding(2, 2, 2, 0)
+
+$temporaryPromptCheck = New-Object System.Windows.Forms.CheckBox
+$temporaryPromptCheck.Text = '临时提示词'
+$temporaryPromptCheck.Checked = $savedTemporaryPrompt
+$temporaryPromptCheck.AutoSize = $true
+$temporaryPromptCheck.Font = $labelFont
+$temporaryPromptCheck.Margin = New-Object System.Windows.Forms.Padding(2, 6, 2, 0)
 
 $copyButton = New-Object System.Windows.Forms.Button
 $copyButton.Text = '复制'
@@ -2388,6 +2460,7 @@ $contextThinkingPanel.Controls.Add($contextCombo) | Out-Null
 $contextThinkingPanel.Controls.Add($thinkingLabel) | Out-Null
 $contextThinkingPanel.Controls.Add($thinkingCombo) | Out-Null
 $actionPanel.Controls.Add($refreshButton) | Out-Null
+$actionPanel.Controls.Add($temporaryPromptCheck) | Out-Null
 $actionPanel.Controls.Add($promptButton) | Out-Null
 $actionPanel.Controls.Add($copyButton) | Out-Null
 $actionPanel.Controls.Add($clearButton) | Out-Null
@@ -2600,13 +2673,14 @@ function Update-ModeAvailability {
 
 function Edit-PromptTemplates {
     $editor = New-Object System.Windows.Forms.Form
-    $editor.Text = 'Edit Translation Prompts'
-    $editor.Size = New-Object System.Drawing.Size(900, 680)
+    $editor.Text = 'Edit System Prompts'
+    $editor.Size = New-Object System.Drawing.Size($form.Width, $form.Height)
     $editor.MinimumSize = New-Object System.Drawing.Size(760, 540)
     $editor.StartPosition = 'CenterParent'
     $editor.FormBorderStyle = 'Sizable'
     $editor.MaximizeBox = $true
     $editor.MinimizeBox = $false
+    $editor.TopMost = $form.TopMost
 
     $editorPanel = New-Object System.Windows.Forms.TableLayoutPanel
     $editorPanel.Dock = 'Fill'
@@ -2620,9 +2694,10 @@ function Edit-PromptTemplates {
     $editorPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 55)))
 
     $hintLabel = New-Object System.Windows.Forms.Label
-    $hintLabel.Text = '这里只编辑可调提示词；程序还会额外附加不可见的内部系统提示词，并会随配置镜像、思考深度、上下文策略自动切换。请保留 {target_language} 占位符。关闭窗口不保存，点击“保存”才会真正写入。'
+    $hintLabel.Text = '这里只编辑可调系统提示词；程序还会额外附加不可见的内部系统提示词，并会随配置镜像、思考深度、上下文策略自动切换。请保留 {target_language} 占位符。关闭窗口不保存，点击“保存”才会真正写入。'
     $hintLabel.AutoSize = $true
     $hintLabel.Font = $labelFont
+    $hintLabel.MaximumSize = New-Object System.Drawing.Size(([Math]::Max(420, $editor.Width - 140)), 0)
 
     $headerPanel = New-Object System.Windows.Forms.TableLayoutPanel
     $headerPanel.Dock = 'Fill'
@@ -2632,7 +2707,7 @@ function Edit-PromptTemplates {
     $headerPanel.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null
 
     $quickPromptLabel = New-Object System.Windows.Forms.Label
-    $quickPromptLabel.Text = '快速提示词'
+    $quickPromptLabel.Text = '快速系统提示词'
     $quickPromptLabel.AutoSize = $true
     $quickPromptLabel.Font = $labelFont
 
@@ -2644,7 +2719,7 @@ function Edit-PromptTemplates {
     $quickPromptBox.Text = [string]$Script:PromptTemplates.quick
 
     $deepPromptLabel = New-Object System.Windows.Forms.Label
-    $deepPromptLabel.Text = '思考提示词'
+    $deepPromptLabel.Text = '思考系统提示词'
     $deepPromptLabel.AutoSize = $true
     $deepPromptLabel.Font = $labelFont
 
@@ -2697,16 +2772,34 @@ function Edit-PromptTemplates {
     $editorPanel.Controls.Add($deepPromptBox, 0, 4)
 
     $editor.Controls.Add($editorPanel)
+    $editor.Add_SizeChanged({
+        $hintLabel.MaximumSize = New-Object System.Drawing.Size(([Math]::Max(420, $editor.ClientSize.Width - 140)), 0)
+    }.GetNewClosure())
     [void]$editor.Show($form)
+    $editor.Activate()
 }
 
 function Start-TranslationWorker {
-    $text = $inputBox.Text.Trim()
+    $rawText = $inputBox.Text.Trim()
+    $temporaryPrompt = ''
+    $text = $rawText
+    $parsedTemporaryPrompt = $false
+    if ($temporaryPromptCheck.Checked) {
+        $temporaryPromptInfo = Split-TemporaryPrompt -Text $rawText
+        $temporaryPrompt = [string]$temporaryPromptInfo.TemporaryPrompt
+        $text = [string]$temporaryPromptInfo.SourceText
+        $parsedTemporaryPrompt = [bool]$temporaryPromptInfo.Parsed
+    }
 
     if ([string]::IsNullOrWhiteSpace($text)) {
         $debounceTimer.Stop()
         $outputBox.Text = ''
-        $statusLabel.Text = 'Ready'
+        if ($parsedTemporaryPrompt) {
+            $statusLabel.Text = '临时提示词已读取，等待第一个“。”后的待翻译文本'
+        }
+        else {
+            $statusLabel.Text = 'Ready'
+        }
         Stop-FloatBusyAnimation
         return
     }
@@ -2741,7 +2834,7 @@ function Start-TranslationWorker {
     else {
         $userMessage = Get-UserTranslationMessage -Text $text -TargetLanguage $targetLanguage -Mode $selectedMode -ContextReference $contextReference
     }
-    $systemMessages = Get-SystemMessages -TargetLanguage $targetLanguage -Mode $selectedMode -MirrorConfig $mirrorConfig -ThinkingOption $thinkingOption -ContextOption $contextOption
+    $systemMessages = Get-SystemMessages -TargetLanguage $targetLanguage -Mode $selectedMode -MirrorConfig $mirrorConfig -ThinkingOption $thinkingOption -ContextOption $contextOption -TemporaryPrompt $temporaryPrompt
     $requestOptions = Get-RequestOptions -Model $selectedModel -Mode $selectedMode -ThinkingOption $thinkingOption
     $systemMessagesJson = $systemMessages | ConvertTo-Json -Depth 5 -Compress
     $requestOptionsJson = $requestOptions | ConvertTo-Json -Compress
@@ -2801,6 +2894,28 @@ function Set-InputTextWithoutAutoTranslate {
     $Script:SuppressInputChanged = $true
     try {
         $inputBox.Text = $Text
+    }
+    finally {
+        $Script:SuppressInputChanged = $false
+    }
+}
+
+function Ensure-TemporaryPromptPlaceholder {
+    if ($null -eq (Get-Variable -Name temporaryPromptCheck -Scope Script -ErrorAction SilentlyContinue)) {
+        return
+    }
+    if (-not $script:temporaryPromptCheck.Checked) {
+        return
+    }
+    if (-not [string]::IsNullOrWhiteSpace($inputBox.Text)) {
+        return
+    }
+
+    $Script:SuppressInputChanged = $true
+    try {
+        $inputBox.Text = $Script:TemporaryPromptPrefix
+        $inputBox.SelectionStart = $inputBox.TextLength
+        $inputBox.SelectionLength = 0
     }
     finally {
         $Script:SuppressInputChanged = $false
@@ -3517,6 +3632,34 @@ $promptButton.add_Click({
     Edit-PromptTemplates
 })
 
+$temporaryPromptCheck.add_CheckedChanged({
+    if ($temporaryPromptCheck.Checked) {
+        Ensure-TemporaryPromptPlaceholder
+        $statusLabel.Text = '已开启临时提示词：以 oder:提示词。待翻译文本 的格式输入'
+    }
+    else {
+        if ($inputBox.Text.Trim() -eq $Script:TemporaryPromptPrefix) {
+            $Script:SuppressInputChanged = $true
+            try {
+                $inputBox.Clear()
+            }
+            finally {
+                $Script:SuppressInputChanged = $false
+            }
+        }
+        $statusLabel.Text = '已关闭临时提示词'
+    }
+    try {
+        Save-WindowSettings -Form $form
+    }
+    catch {
+    }
+    if (-not [string]::IsNullOrWhiteSpace($inputBox.Text)) {
+        $debounceTimer.Stop()
+        Start-TranslationWorker
+    }
+})
+
 $copyButton.add_Click({
     if ([string]::IsNullOrWhiteSpace($outputBox.Text)) {
         $statusLabel.Text = 'Nothing to copy'
@@ -3530,6 +3673,7 @@ $copyButton.add_Click({
 $clearButton.add_Click({
     $debounceTimer.Stop()
     $inputBox.Clear()
+    Ensure-TemporaryPromptPlaceholder
     $outputBox.Clear()
     $statusLabel.Text = 'Cleared'
 })
@@ -3621,6 +3765,7 @@ $form.add_FormClosing({
 })
 
 $form.add_Shown({
+    Ensure-TemporaryPromptPlaceholder
     if ($Script:DisplayMode -eq 'float') {
         Enter-FloatMode
     }

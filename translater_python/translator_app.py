@@ -41,10 +41,11 @@ DEBOUNCE_MS = 80
 REQUEST_TIMEOUT = 45
 THINKING_SUPPORT_PROBE_TIMEOUT = 12
 QUEUE_POLL_MS = 30
-DEFAULT_GEOMETRY = "900x600"
+DEFAULT_GEOMETRY = "900x640"
 MIN_WINDOW_SIZE = (560, 430)
 CACHE_MAX_ENTRIES = 400
 TRANSLATION_WRAPPER_VERSION = "source-markers-v4-mirror-layout"
+TEMP_PROMPT_PREFIX = "oder:"
 FLOAT_BUTTON_SIZE = 54
 FLOAT_EXIT_SIZE = 20
 FLOAT_CLICK_TOLERANCE = 7
@@ -376,6 +377,19 @@ def save_window_geometry(settings_path: Path, app_key: str, geometry: str) -> No
     save_app_window_settings(settings_path, app_key, {"geometry": geometry})
 
 
+def center_geometry(root: Tk, geometry: str) -> str:
+    match = GEOMETRY_RE.match(geometry)
+    if not match:
+        return geometry
+    width = int(match.group(1))
+    height = int(match.group(2))
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    x = max(20, (screen_width - width) // 2)
+    y = max(20, (screen_height - height) // 2)
+    return f"{width}x{height}+{x}+{y}"
+
+
 def build_internal_system_prompt(target_language: str) -> str:
     return INTERNAL_SYSTEM_PROMPT_TEMPLATE.format(target_language=target_language)
 
@@ -496,6 +510,15 @@ def build_thinking_prompt(thinking_option: str) -> str:
     return THINKING_PROMPTS.get(thinking_option, THINKING_PROMPTS[DEFAULT_THINKING_OPTION])
 
 
+def build_temporary_prompt(temp_prompt: str) -> str:
+    return (
+        "以下是用户通过临时提示词开关为本次翻译额外指定的翻译要求。"
+        "它只影响本次翻译的术语、风格、领域和表达取向，不属于待翻译原文，也不能出现在输出中。"
+        "如果它与内部安全边界、只输出译文、保留结构等规则冲突，内部规则优先。\n"
+        f"{temp_prompt.strip()}"
+    )
+
+
 def model_supports_api_thinking(model: str) -> bool:
     return model in API_THINKING_SUPPORTED_MODELS
 
@@ -545,6 +568,7 @@ def build_system_messages(
     mirror_config: bool,
     thinking_option: str,
     context_option: str,
+    temporary_prompt: str = "",
 ) -> list[dict[str, str]]:
     prompt_parts = [
         build_internal_system_prompt(target_language),
@@ -553,8 +577,22 @@ def build_system_messages(
     if is_thinking_mode(mode):
         prompt_parts.append(build_thinking_prompt(thinking_option))
     prompt_parts.append(build_editable_system_prompt(target_language, mode, templates))
+    if temporary_prompt.strip():
+        prompt_parts.append(build_temporary_prompt(temporary_prompt))
     combined_prompt = "\n\n".join(prompt_parts)
     return [{"role": "system", "content": combined_prompt}]
+
+
+def split_temporary_prompt(text: str) -> tuple[str, str, bool]:
+    if not text.startswith(TEMP_PROMPT_PREFIX):
+        return "", text, False
+    body = text[len(TEMP_PROMPT_PREFIX) :]
+    separator_index = body.find("。")
+    if separator_index < 0:
+        return body.strip(), "", True
+    temporary_prompt = body[:separator_index].strip()
+    source_text = body[separator_index + 1 :].strip()
+    return temporary_prompt, source_text, True
 
 
 def choose_source_markers(text: str) -> tuple[str, str]:
@@ -1108,7 +1146,8 @@ class TranslatorApp:
         saved_settings = get_app_window_settings(WINDOW_SETTINGS_FILE, self._app_settings_key)
         self.root.title("Translator Float")
         self.root.minsize(*MIN_WINDOW_SIZE)
-        self.root.geometry(get_saved_geometry(WINDOW_SETTINGS_FILE, self._app_settings_key) or DEFAULT_GEOMETRY)
+        saved_geometry = get_saved_geometry(WINDOW_SETTINGS_FILE, self._app_settings_key)
+        self.root.geometry(saved_geometry or center_geometry(self.root, DEFAULT_GEOMETRY))
         saved_topmost = saved_settings.get("topmost")
         initial_topmost = saved_topmost if isinstance(saved_topmost, bool) else True
         self.root.attributes("-topmost", initial_topmost)
@@ -1126,6 +1165,7 @@ class TranslatorApp:
         saved_thinking = saved_settings.get("thinking")
         saved_context = saved_settings.get("context")
         saved_mirror_config = saved_settings.get("mirror_config")
+        saved_temporary_prompt = saved_settings.get("temporary_prompt")
         saved_thinking_support = saved_settings.get("thinking_support")
         self.model_settings = normalize_model_settings(saved_settings.get("model_settings"))
         self.available_models = get_configured_models(self.config, saved_model)
@@ -1160,6 +1200,7 @@ class TranslatorApp:
         self.thinking_choice_var = StringVar(value=default_thinking)
         self.context_choice_var = StringVar(value=default_context)
         self.mirror_config_var = BooleanVar(value=default_mirror_config)
+        self.temporary_prompt_var = BooleanVar(value=saved_temporary_prompt if isinstance(saved_temporary_prompt, bool) else False)
         self.topmost_var = BooleanVar(value=initial_topmost)
 
         self._after_id: str | None = None
@@ -1190,6 +1231,7 @@ class TranslatorApp:
         self._start_in_floating_mode = self._display_mode == "float"
 
         self._build_ui()
+        self.ensure_temporary_prompt_placeholder()
         self.persist_ui_state()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         self.root.after(QUEUE_POLL_MS, self._poll_queue)
@@ -1203,9 +1245,12 @@ class TranslatorApp:
 
         container = ttk.Frame(self.root, padding=12)
         container.pack(fill="both", expand=True)
+        container.columnconfigure(0, weight=1)
+        container.rowconfigure(2, weight=1)
+        container.rowconfigure(4, weight=1)
 
         toolbar = ttk.Frame(container)
-        toolbar.pack(fill="x", pady=(0, 8))
+        toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         toolbar.columnconfigure(1, weight=1)
 
         ttk.Label(toolbar, text="模型").grid(row=0, column=0, sticky="w")
@@ -1298,23 +1343,29 @@ class TranslatorApp:
         actions_frame.grid(row=2, column=4, columnspan=2, sticky="e", pady=(6, 0))
 
         ttk.Button(actions_frame, text="刷新", width=5, command=self.refresh_models).pack(side="left", padx=(2, 0))
-        ttk.Button(actions_frame, text="提示词", width=6, command=self.open_prompt_editor).pack(side="left", padx=(4, 0))
+        ttk.Checkbutton(
+            actions_frame,
+            text="临时提示词",
+            variable=self.temporary_prompt_var,
+            command=self.on_temporary_prompt_toggled,
+        ).pack(side="left", padx=(4, 0))
+        ttk.Button(actions_frame, text="系统提示词", width=10, command=self.open_prompt_editor).pack(side="left", padx=(4, 0))
         ttk.Button(actions_frame, text="复制", width=5, command=self.copy_output).pack(side="left", padx=(4, 0))
         ttk.Button(actions_frame, text="清空", width=5, command=self.clear_all).pack(side="left", padx=(4, 0))
 
-        ttk.Label(container, text="输入（自动即时翻译）").pack(anchor="w")
+        ttk.Label(container, text="输入（自动即时翻译）").grid(row=1, column=0, sticky="w")
         self.input_text = Text(container, height=11, wrap="word", undo=True, font=("Microsoft YaHei UI", 10))
-        self.input_text.pack(fill="both", expand=True)
+        self.input_text.grid(row=2, column=0, sticky="nsew")
         self.input_text.bind("<<Modified>>", self.on_input_modified)
         self.input_text.focus_set()
 
-        ttk.Label(container, text="输出").pack(anchor="w", pady=(8, 0))
+        ttk.Label(container, text="输出").grid(row=3, column=0, sticky="w", pady=(8, 0))
         self.output_text = Text(container, height=11, wrap="word", font=("Microsoft YaHei UI", 10))
-        self.output_text.pack(fill="both", expand=True)
+        self.output_text.grid(row=4, column=0, sticky="nsew")
         self.output_text.configure(state="disabled")
 
         status_bar = ttk.Frame(container)
-        status_bar.pack(fill="x", pady=(8, 0))
+        status_bar.grid(row=5, column=0, sticky="ew", pady=(8, 0))
         ttk.Label(status_bar, textvariable=self.status_var).pack(side="left")
         ttk.Label(status_bar, textvariable=self.model_var).pack(side="right")
 
@@ -1886,9 +1937,16 @@ class TranslatorApp:
 
     def open_prompt_editor(self) -> None:
         editor = Toplevel(self.root)
-        editor.title("编辑翻译提示词")
-        editor.geometry("860x640")
+        editor.title("编辑系统提示词")
+        self.root.update_idletasks()
+        width = max(self.root.winfo_width(), 760)
+        height = max(self.root.winfo_height(), 540)
+        x = self.root.winfo_rootx()
+        y = self.root.winfo_rooty()
+        editor.geometry(f"{width}x{height}+{x}+{y}")
+        editor.minsize(760, 540)
         editor.transient(self.root)
+        editor.attributes("-topmost", bool(self.topmost_var.get()))
 
         container = ttk.Frame(editor, padding=12)
         container.pack(fill="both", expand=True)
@@ -1910,21 +1968,32 @@ class TranslatorApp:
 
         header_bar = ttk.Frame(container)
         header_bar.pack(fill="x", pady=(0, 8))
-        ttk.Label(
+        header_bar.columnconfigure(0, weight=1)
+        hint_label = ttk.Label(
             header_bar,
-            text="这里只编辑可调提示词；程序还会额外附加不可见的内部系统提示词，并会随配置镜像、思考深度、上下文策略自动切换。请保留 {target_language} 占位符。关闭窗口不保存，点击“保存”才会真正写入。",
-        ).pack(side="left", fill="x", expand=True)
-        ttk.Button(header_bar, text="保存", width=6, command=save_prompts).pack(side="right", padx=(8, 0))
+            text="这里只编辑可调系统提示词；程序还会额外附加不可见的内部系统提示词，并会随配置镜像、思考深度、上下文策略自动切换。请保留 {target_language} 占位符。关闭窗口不保存，点击“保存”才会真正写入。",
+            wraplength=max(520, width - 130),
+        )
+        hint_label.grid(row=0, column=0, sticky="ew")
+        ttk.Button(header_bar, text="保存", width=6, command=save_prompts).grid(row=0, column=1, sticky="ne", padx=(8, 0))
 
-        ttk.Label(container, text="快速提示词").pack(anchor="w")
+        def resize_hint(event: object) -> None:
+            widget_width = int(getattr(event, "width", width))
+            hint_label.configure(wraplength=max(420, widget_width - 100))
+
+        header_bar.bind("<Configure>", resize_hint)
+
+        ttk.Label(container, text="快速系统提示词").pack(anchor="w")
         quick_text = Text(container, height=12, wrap="word", font=("Microsoft YaHei UI", 10))
         quick_text.pack(fill="both", expand=True)
         quick_text.insert("1.0", self.prompt_templates["quick"])
 
-        ttk.Label(container, text="思考提示词").pack(anchor="w", pady=(10, 0))
+        ttk.Label(container, text="思考系统提示词").pack(anchor="w", pady=(10, 0))
         deep_text = Text(container, height=15, wrap="word", font=("Microsoft YaHei UI", 10))
         deep_text.pack(fill="both", expand=True)
         deep_text.insert("1.0", self.prompt_templates["deep"])
+        editor.lift()
+        editor.focus_force()
 
     def invalidate_pending_requests(self) -> None:
         self._request_seq += 1
@@ -2043,10 +2112,18 @@ class TranslatorApp:
 
     def start_translation(self) -> None:
         self._after_id = None
-        text = self.get_input_text().strip()
+        raw_text = self.get_input_text().strip()
+        temporary_prompt = ""
+        parsed_temporary_prompt = False
+        text = raw_text
+        if self.temporary_prompt_var.get():
+            temporary_prompt, text, parsed_temporary_prompt = split_temporary_prompt(raw_text)
         if not text:
             self.invalidate_pending_requests()
-            self.status_var.set("就绪")
+            if parsed_temporary_prompt:
+                self.status_var.set("临时提示词已读取，等待第一个“。”后的待翻译文本")
+            else:
+                self.status_var.set("就绪")
             self.set_output_text("")
             self.stop_float_busy_animation()
             return
@@ -2075,6 +2152,7 @@ class TranslatorApp:
             mirror_config=mirror_config,
             thinking_option=thinking_option,
             context_option=context_option,
+            temporary_prompt=temporary_prompt,
         )
         if model_prefers_compact_prompt(selected_model):
             user_message = build_compact_user_translation_message(text, target_language, mirror_config)
@@ -2394,12 +2472,43 @@ class TranslatorApp:
         self.root.clipboard_append(text)
         self.status_var.set("译文已复制到剪贴板")
 
+    def ensure_temporary_prompt_placeholder(self) -> None:
+        if not self.temporary_prompt_var.get():
+            return
+        if self.get_input_text().strip():
+            return
+        self._suppress_input_modified = True
+        try:
+            self.input_text.insert("1.0", TEMP_PROMPT_PREFIX)
+            self.input_text.mark_set("insert", END)
+            self.input_text.edit_modified(False)
+        finally:
+            self._suppress_input_modified = False
+
+    def on_temporary_prompt_toggled(self) -> None:
+        enabled = bool(self.temporary_prompt_var.get())
+        if enabled:
+            self.ensure_temporary_prompt_placeholder()
+            self.status_var.set("已开启临时提示词：以 oder:提示词。待翻译文本 的格式输入")
+        else:
+            if self.get_input_text().strip() == TEMP_PROMPT_PREFIX:
+                self._suppress_input_modified = True
+                try:
+                    self.input_text.delete("1.0", END)
+                    self.input_text.edit_modified(False)
+                finally:
+                    self._suppress_input_modified = False
+            self.status_var.set("已关闭临时提示词")
+        self.persist_ui_state()
+        self.restart_translation_if_needed()
+
     def clear_all(self) -> None:
         if self._after_id is not None:
             self.root.after_cancel(self._after_id)
             self._after_id = None
         self.invalidate_pending_requests()
         self.input_text.delete("1.0", END)
+        self.ensure_temporary_prompt_placeholder()
         self.set_output_text("")
         self.stop_float_busy_animation()
         self.status_var.set("已清空")
@@ -2412,6 +2521,7 @@ class TranslatorApp:
             "thinking": self.thinking_choice_var.get().strip() or DEFAULT_THINKING_OPTION,
             "context": self.context_choice_var.get().strip() or DEFAULT_CONTEXT_OPTION,
             "mirror_config": bool(self.mirror_config_var.get()),
+            "temporary_prompt": bool(self.temporary_prompt_var.get()),
             "topmost": bool(self.topmost_var.get()),
             "display_mode": self._display_mode,
             "thinking_support": self.thinking_support_cache,

@@ -2292,16 +2292,17 @@ $labelFont = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
 
 $topPanel = New-Object System.Windows.Forms.TableLayoutPanel
 $topPanel.Dock = 'Top'
-$topPanel.Height = 104
+$topPanel.Height = 134
 $topPanel.Padding = New-Object System.Windows.Forms.Padding(8, 6, 8, 2)
 $topPanel.ColumnCount = 6
-$topPanel.RowCount = 3
+$topPanel.RowCount = 4
 $topPanel.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null
 $topPanel.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 100))) | Out-Null
 $topPanel.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null
 $topPanel.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null
 $topPanel.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null
 $topPanel.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null
+$topPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 30))) | Out-Null
 $topPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 30))) | Out-Null
 $topPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 30))) | Out-Null
 $topPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 30))) | Out-Null
@@ -2360,6 +2361,13 @@ $deepRadio.Font = $labelFont
 $deepRadio.AutoSize = $true
 $deepRadio.Checked = ($initialMode -eq 'Deep')
 $deepRadio.Margin = New-Object System.Windows.Forms.Padding(0, 5, 6, 0)
+
+$temporaryPromptCheck = New-Object System.Windows.Forms.CheckBox
+$temporaryPromptCheck.Text = '临时提示词'
+$temporaryPromptCheck.Checked = $savedTemporaryPrompt
+$temporaryPromptCheck.AutoSize = $true
+$temporaryPromptCheck.Font = $labelFont
+$temporaryPromptCheck.Margin = New-Object System.Windows.Forms.Padding(8, 5, 0, 0)
 
 $floatModeButton = New-Object System.Windows.Forms.Button
 $floatModeButton.Text = '悬浮'
@@ -2421,13 +2429,6 @@ $promptButton.Font = $labelFont
 $promptButton.Size = New-Object System.Drawing.Size(82, 26)
 $promptButton.Margin = New-Object System.Windows.Forms.Padding(2, 2, 2, 0)
 
-$temporaryPromptCheck = New-Object System.Windows.Forms.CheckBox
-$temporaryPromptCheck.Text = '临时提示词'
-$temporaryPromptCheck.Checked = $savedTemporaryPrompt
-$temporaryPromptCheck.AutoSize = $true
-$temporaryPromptCheck.Font = $labelFont
-$temporaryPromptCheck.Margin = New-Object System.Windows.Forms.Padding(2, 6, 2, 0)
-
 $copyButton = New-Object System.Windows.Forms.Button
 $copyButton.Text = '复制'
 $copyButton.Font = $labelFont
@@ -2459,8 +2460,8 @@ $modePanel.Controls.Add($deepRadio) | Out-Null
 $contextThinkingPanel.Controls.Add($contextCombo) | Out-Null
 $contextThinkingPanel.Controls.Add($thinkingLabel) | Out-Null
 $contextThinkingPanel.Controls.Add($thinkingCombo) | Out-Null
-$actionPanel.Controls.Add($refreshButton) | Out-Null
 $actionPanel.Controls.Add($temporaryPromptCheck) | Out-Null
+$actionPanel.Controls.Add($refreshButton) | Out-Null
 $actionPanel.Controls.Add($promptButton) | Out-Null
 $actionPanel.Controls.Add($copyButton) | Out-Null
 $actionPanel.Controls.Add($clearButton) | Out-Null
@@ -2476,8 +2477,8 @@ $topPanel.Controls.Add($floatModeButton, 4, 1)
 $topPanel.SetColumnSpan($floatModeButton, 2)
 $topPanel.Controls.Add($contextLabel, 0, 2)
 $topPanel.Controls.Add($contextThinkingPanel, 1, 2)
-$topPanel.Controls.Add($actionPanel, 4, 2)
-$topPanel.SetColumnSpan($actionPanel, 2)
+$topPanel.Controls.Add($actionPanel, 0, 3)
+$topPanel.SetColumnSpan($actionPanel, 6)
 
 $mainPanel = New-Object System.Windows.Forms.TableLayoutPanel
 $mainPanel.Dock = 'Fill'
@@ -2675,7 +2676,7 @@ function Edit-PromptTemplates {
     $editor = New-Object System.Windows.Forms.Form
     $editor.Text = 'Edit System Prompts'
     $editor.Size = New-Object System.Drawing.Size($form.Width, $form.Height)
-    $editor.MinimumSize = New-Object System.Drawing.Size(760, 540)
+    $editor.MinimumSize = New-Object System.Drawing.Size($form.MinimumSize.Width, $form.MinimumSize.Height)
     $editor.StartPosition = 'CenterParent'
     $editor.FormBorderStyle = 'Sizable'
     $editor.MaximizeBox = $true
@@ -2689,15 +2690,15 @@ function Edit-PromptTemplates {
     $editorPanel.RowCount = 5
     $editorPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
     $editorPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
-    $editorPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 45)))
+    $editorPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 35)))
     $editorPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
-    $editorPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 55)))
+    $editorPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 65)))
 
     $hintLabel = New-Object System.Windows.Forms.Label
     $hintLabel.Text = '这里只编辑可调系统提示词；程序还会额外附加不可见的内部系统提示词，并会随配置镜像、思考深度、上下文策略自动切换。请保留 {target_language} 占位符。关闭窗口不保存，点击“保存”才会真正写入。'
     $hintLabel.AutoSize = $true
     $hintLabel.Font = $labelFont
-    $hintLabel.MaximumSize = New-Object System.Drawing.Size(([Math]::Max(420, $editor.Width - 140)), 0)
+    $hintLabel.MaximumSize = New-Object System.Drawing.Size(([Math]::Max(280, $editor.Width - 140)), 0)
 
     $headerPanel = New-Object System.Windows.Forms.TableLayoutPanel
     $headerPanel.Dock = 'Fill'
@@ -2773,21 +2774,22 @@ function Edit-PromptTemplates {
 
     $editor.Controls.Add($editorPanel)
     $editor.Add_SizeChanged({
-        $hintLabel.MaximumSize = New-Object System.Drawing.Size(([Math]::Max(420, $editor.ClientSize.Width - 140)), 0)
+        $hintLabel.MaximumSize = New-Object System.Drawing.Size(([Math]::Max(280, $editor.ClientSize.Width - 140)), 0)
     }.GetNewClosure())
     [void]$editor.Show($form)
     $editor.Activate()
 }
 
 function Start-TranslationWorker {
-    $rawText = $inputBox.Text.Trim()
+    $rawInputText = [string]$inputBox.Text
+    $rawText = $rawInputText.Trim()
     $temporaryPrompt = ''
     $text = $rawText
     $parsedTemporaryPrompt = $false
     if ($temporaryPromptCheck.Checked) {
-        $temporaryPromptInfo = Split-TemporaryPrompt -Text $rawText
+        $temporaryPromptInfo = Split-TemporaryPrompt -Text $rawInputText
         $temporaryPrompt = [string]$temporaryPromptInfo.TemporaryPrompt
-        $text = [string]$temporaryPromptInfo.SourceText
+        $text = ([string]$temporaryPromptInfo.SourceText).Trim()
         $parsedTemporaryPrompt = [bool]$temporaryPromptInfo.Parsed
     }
 

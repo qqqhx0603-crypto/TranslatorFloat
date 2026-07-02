@@ -1340,15 +1340,15 @@ class TranslatorApp:
         self.thinking_combo.bind("<<ComboboxSelected>>", self.on_thinking_selected)
 
         actions_frame = ttk.Frame(toolbar)
-        actions_frame.grid(row=2, column=4, columnspan=2, sticky="e", pady=(6, 0))
+        actions_frame.grid(row=3, column=0, columnspan=6, sticky="e", pady=(6, 0))
 
-        ttk.Button(actions_frame, text="刷新", width=5, command=self.refresh_models).pack(side="left", padx=(2, 0))
         ttk.Checkbutton(
             actions_frame,
             text="临时提示词",
             variable=self.temporary_prompt_var,
             command=self.on_temporary_prompt_toggled,
-        ).pack(side="left", padx=(4, 0))
+        ).pack(side="left", padx=(2, 0))
+        ttk.Button(actions_frame, text="刷新", width=5, command=self.refresh_models).pack(side="left", padx=(2, 0))
         ttk.Button(actions_frame, text="系统提示词", width=10, command=self.open_prompt_editor).pack(side="left", padx=(4, 0))
         ttk.Button(actions_frame, text="复制", width=5, command=self.copy_output).pack(side="left", padx=(4, 0))
         ttk.Button(actions_frame, text="清空", width=5, command=self.clear_all).pack(side="left", padx=(4, 0))
@@ -1939,12 +1939,12 @@ class TranslatorApp:
         editor = Toplevel(self.root)
         editor.title("编辑系统提示词")
         self.root.update_idletasks()
-        width = max(self.root.winfo_width(), 760)
-        height = max(self.root.winfo_height(), 540)
+        width = max(self.root.winfo_width(), MIN_WINDOW_SIZE[0])
+        height = max(self.root.winfo_height(), MIN_WINDOW_SIZE[1])
         x = self.root.winfo_rootx()
         y = self.root.winfo_rooty()
         editor.geometry(f"{width}x{height}+{x}+{y}")
-        editor.minsize(760, 540)
+        editor.minsize(*MIN_WINDOW_SIZE)
         editor.transient(self.root)
         editor.attributes("-topmost", bool(self.topmost_var.get()))
 
@@ -1972,24 +1972,24 @@ class TranslatorApp:
         hint_label = ttk.Label(
             header_bar,
             text="这里只编辑可调系统提示词；程序还会额外附加不可见的内部系统提示词，并会随配置镜像、思考深度、上下文策略自动切换。请保留 {target_language} 占位符。关闭窗口不保存，点击“保存”才会真正写入。",
-            wraplength=max(520, width - 130),
+            wraplength=max(300, width - 130),
         )
         hint_label.grid(row=0, column=0, sticky="ew")
         ttk.Button(header_bar, text="保存", width=6, command=save_prompts).grid(row=0, column=1, sticky="ne", padx=(8, 0))
 
         def resize_hint(event: object) -> None:
             widget_width = int(getattr(event, "width", width))
-            hint_label.configure(wraplength=max(420, widget_width - 100))
+            hint_label.configure(wraplength=max(260, widget_width - 100))
 
         header_bar.bind("<Configure>", resize_hint)
 
         ttk.Label(container, text="快速系统提示词").pack(anchor="w")
-        quick_text = Text(container, height=12, wrap="word", font=("Microsoft YaHei UI", 10))
+        quick_text = Text(container, height=6, wrap="word", font=("Microsoft YaHei UI", 10))
         quick_text.pack(fill="both", expand=True)
         quick_text.insert("1.0", self.prompt_templates["quick"])
 
         ttk.Label(container, text="思考系统提示词").pack(anchor="w", pady=(10, 0))
-        deep_text = Text(container, height=15, wrap="word", font=("Microsoft YaHei UI", 10))
+        deep_text = Text(container, height=11, wrap="word", font=("Microsoft YaHei UI", 10))
         deep_text.pack(fill="both", expand=True)
         deep_text.insert("1.0", self.prompt_templates["deep"])
         editor.lift()
@@ -2112,12 +2112,14 @@ class TranslatorApp:
 
     def start_translation(self) -> None:
         self._after_id = None
-        raw_text = self.get_input_text().strip()
+        raw_input_text = self.get_input_text()
+        raw_text = raw_input_text.strip()
         temporary_prompt = ""
         parsed_temporary_prompt = False
         text = raw_text
         if self.temporary_prompt_var.get():
-            temporary_prompt, text, parsed_temporary_prompt = split_temporary_prompt(raw_text)
+            temporary_prompt, text, parsed_temporary_prompt = split_temporary_prompt(raw_input_text)
+            text = text.strip()
         if not text:
             self.invalidate_pending_requests()
             if parsed_temporary_prompt:

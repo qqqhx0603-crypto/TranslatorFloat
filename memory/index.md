@@ -11,7 +11,7 @@
 - 不泄露 API Key。
 - 不随意删除或重置 `translation_cache.json`、`window_settings.json`。
 - Python 版本相关文件必须留在 `translater_python` 文件夹内，PowerShell 版本相关文件必须留在 `translater_powershell` 文件夹内，便于任一文件夹直接压缩分发。
-- 临时提示词格式固定为 `oder:提示词。待翻译文本`；只有勾选“临时提示词”且输入严格以小写 `oder:` 开头时才解析，`oder:` 到第一个中文句号 `。` 之间的内容作为本次 system prompt，不作为原文。
+- 临时提示词格式固定为 `oder:提示词。待翻译文本`；只有勾选“临时提示词”且输入严格以小写 `oder:` 开头时才解析，`oder:` 到第一个中文句号 `。` 之间的内容作为本次 system/user 输出约束，不作为原文；它应能优先控制固定输出、大小写、格式、术语和后处理。
 
 ## 详细记录
 

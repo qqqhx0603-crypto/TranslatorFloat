@@ -10,7 +10,7 @@ import threading
 from difflib import SequenceMatcher
 from dataclasses import dataclass
 from pathlib import Path
-from tkinter import Canvas, END, BooleanVar, Frame, Label, StringVar, Text, Tk, Toplevel, messagebox
+from tkinter import Canvas, END, BooleanVar, Frame, Label, Menu, StringVar, Text, Tk, Toplevel, messagebox
 from tkinter import ttk
 from urllib import error, parse, request
 
@@ -1423,6 +1423,9 @@ class TranslatorApp:
         self.input_text = Text(container, height=11, wrap="word", undo=True, font=("Microsoft YaHei UI", 10))
         self.input_text.grid(row=2, column=0, sticky="nsew")
         self.input_text.bind("<<Modified>>", self.on_input_modified)
+        self.input_context_menu = Menu(self.root, tearoff=0)
+        self.input_context_menu.add_command(label="粘贴", command=self.paste_into_input)
+        self.input_text.bind("<Button-3>", self.show_input_context_menu)
         self.input_text.focus_set()
 
         ttk.Label(container, text="输出").grid(row=3, column=0, sticky="w", pady=(8, 0))
@@ -1436,6 +1439,20 @@ class TranslatorApp:
         ttk.Label(status_bar, textvariable=self.model_var).pack(side="right")
 
         self.update_mode_availability()
+
+    def show_input_context_menu(self, event: object) -> str:
+        self.input_text.focus_set()
+        try:
+            self.input_context_menu.tk_popup(event.x_root, event.y_root)  # type: ignore[attr-defined]
+        finally:
+            self.input_context_menu.grab_release()
+        return "break"
+
+    def paste_into_input(self) -> None:
+        try:
+            self.input_text.event_generate("<<Paste>>")
+        except Exception as exc:  # noqa: BLE001
+            self.status_var.set(f"粘贴失败: {exc}")
 
     def get_model_thinking_support(self, model: str) -> bool | None:
         if not model:

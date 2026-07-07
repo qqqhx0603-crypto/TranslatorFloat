@@ -2611,6 +2611,19 @@ $inputBox.AcceptsReturn = $true
 $inputBox.AcceptsTab = $true
 $inputBox.Dock = 'Fill'
 $inputBox.Font = $font
+$inputContextMenu = New-Object System.Windows.Forms.ContextMenuStrip
+$pasteMenuItem = New-Object System.Windows.Forms.ToolStripMenuItem
+$pasteMenuItem.Text = '粘贴'
+$pasteMenuItem.Add_Click({
+    if ([System.Windows.Forms.Clipboard]::ContainsText()) {
+        $inputBox.Paste()
+    }
+    else {
+        $statusLabel.Text = '剪贴板没有可粘贴文本'
+    }
+}.GetNewClosure())
+[void]$inputContextMenu.Items.Add($pasteMenuItem)
+$inputBox.ContextMenuStrip = $inputContextMenu
 
 $outputLabel = New-Object System.Windows.Forms.Label
 $outputLabel.Text = 'Output'

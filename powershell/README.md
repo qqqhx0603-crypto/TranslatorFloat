@@ -2,12 +2,12 @@
 
 一个基于 `Windows PowerShell / PowerShell` 与 `Windows Forms` 的桌面翻译浮窗。
 
-这个文件夹本身就是一份完整的 PowerShell 版本。需要备份或分发时，直接压缩整个 `translater_powershell` 文件夹即可。
+这个文件夹本身就是一份完整的 PowerShell 版本。需要备份或分发时，直接压缩整个 `powershell` 文件夹即可。
 
 ## 文件夹内容
 
-- `translator_native.ps1`：主程序
-- `launch_powershell_translator.bat`：启动脚本
+- `translator.ps1`：主程序
+- `start.bat`：启动脚本
 - `API.txt`：API Key 与模型列表
 - `prompt_templates.json`：可调提示词
 - `translation_cache.json`：翻译缓存
@@ -54,19 +54,19 @@
 双击：
 
 ```text
-launch_powershell_translator.bat
+start.bat
 ```
 
 或在当前目录执行：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File .\translator_native.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File .\translator.ps1
 ```
 
 如果系统安装了 `pwsh`，也可以用：
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -STA -File .\translator_native.ps1
+pwsh -NoProfile -ExecutionPolicy Bypass -STA -File .\translator.ps1
 ```
 
 ## 说明

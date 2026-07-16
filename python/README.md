@@ -6,13 +6,13 @@
 
 - `TranslatorFloat.exe`: 打包后的主程序
 - `translator_app.py`: Python 源码入口
-- `launch_translator.bat`: 源码运行入口
+- `start.bat`: 源码运行入口
 - `API.txt`: API Key 与模型列表
 - `prompt_templates.json`: 快速/深度提示词
 - `translation_cache.json`: 翻译缓存
 - `window_settings.json`: 窗口、模型、模式、上下文、思考等设置缓存
-- `translator_girly_icon.ico` / `translator_girly_icon.png`: 图标资源
-- `vendor`: Python 版独立依赖目录
+- `app_icon.ico` / `app_icon.png`: 图标资源
+- `vendor`: Python 版内置的 Windows x64 拖放依赖目录
 
 ## 运行
 
@@ -25,7 +25,7 @@ TranslatorFloat.exe
 如果需要从源码运行，双击：
 
 ```text
-launch_translator.bat
+start.bat
 ```
 
 ## 浮窗

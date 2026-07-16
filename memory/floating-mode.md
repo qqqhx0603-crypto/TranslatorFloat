@@ -2,7 +2,7 @@
 
 ## 2026-06-04
 
-- 项目根目录只保留版本文件夹与项目记忆，Python 版放在 `translater_python`，PowerShell 版放在 `translater_powershell`。
+- 项目根目录只保留版本文件夹与项目记忆，Python 版放在 `python`，PowerShell 版放在 `powershell`。
 - 两个版本不共用 `API.txt`、`prompt_templates.json`、`translation_cache.json`、`window_settings.json` 或启动文件。
 - Python 版新增悬浮按钮模式：主界面点“悬浮”隐藏主窗口并显示可拖动按钮，靠边半隐藏，鼠标移近伸出。
 - PowerShell 版新增同等悬浮按钮模式，使用 WinForms 原生拖放接收文本。
